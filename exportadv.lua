@@ -167,19 +167,6 @@ function create_folder(folder_name)
     end
 end
 
--- Go back to root folder so dfhack does not break, returns true if successfully
-function move_back_to_main_folder()
-    return dfhack.filesystem.restore_cwd()
-end
-
--- Go to specified folder, returns true if successful
-function move_to_folder(folder)
-    if move_back_to_main_folder() then
-        return dfhack.filesystem.chdir(folder)
-    end
-    return false
-end
-
 -- Get the date of the world as a string
 -- Format: "YYYYY-MM-DD"
 function get_world_date_str()
