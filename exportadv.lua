@@ -1,14 +1,20 @@
--- Export adventurer data into an XML file for use in importadv script.
+-- Export adventurer data into an JSON file for use in importadv script.
 -- Script version: v0.1.0
+-- For DF v0.47.05
 --[====[
 
 exportadv
 =============
-Export adventurer data into an XML file for use in importadv script.
+Export adventurer data into an JSON file for use in importadv script.
 
 Currently, this script only exports adventurer skills, attributes, and professions.
 Future iterations will hopefully be able to export more data to more accurately
 reconstruct an adventurer.
+
+This script will create a file in the format:
+    exported_adventurers/{first_name}-{save_folder}-YYYYY-MM-DD-adventurer.json
+
+Simply enter adventure mode with your character and run this script!
 
 Usage::
 
@@ -16,8 +22,10 @@ Usage::
 
 ]====]
 
+local json = require "json"
+
 -- Attribute Class
-Attribute = {}
+local Attribute = {}
 Attribute.__index = Attribute
 
 function Attribute:new(name, value, max_value)
@@ -35,176 +43,48 @@ function Attribute:toString()
 end
 
 -- Skill Class
-Skill = {}
+local Skill = {}
 Skill.__index = Skill
 
 function Skill:new(id, rating, experience)
     this = {
         id = id or 0,
         rating = rating or 0,
-        experience = experience or 0
+        experience = experience or 0,
+        name = skill_id_to_name(id or 0)
     }
     setmetatable(this, Skill)
     return this
 end
 
-function Skill:getName()
-    -- This table is based off https://dwarffortresswiki.org/index.php/DF2014:Skill_token
-    local lookupTable = {
-        [0] = "MINING",
-        "WOODCUTTING",
-        "CARPENTRY",
-        "DETAILSTONE",
-        "MASONRY",
-        "ANIMALTRAIN",
-        "ANIMALCARE",
-        "DISSECT_FISH",
-        "DISSECT_VERMIN",
-        "PROCESSFISH",
-        "BUTCHER",
-        "TRAPPING",
-        "TANNER",
-        "WEAVING",
-        "BREWING",
-        "ALCHEMY",
-        "CLOTHESMAKING",
-        "MILLING",
-        "PROCESSPLANTS",
-        "CHEESEMAKING",
-        "MILK",
-        "COOK",
-        "PLANT",
-        "HERBALISM",
-        "FISH",
-        "SMELT",
-        "EXTRACT_STRAND",
-        "FORGE_WEAPON",
-        "FORGE_ARMOR",
-        "FORGE_FURNITURE",
-        "CUTGEM",
-        "ENCRUSTGEM",
-        "WOODCRAFT",
-        "STONECRAFT",
-        "METALCRAFT",
-        "GLASSMAKER",
-        "LEATHERWORK",
-        "BONECARVE",
-        "AXE",
-        "SWORD",
-        "DAGGER",
-        "MACE",
-        "HAMMER",
-        "SPEAR",
-        "CROSSBOW",
-        "SHIELD",
-        "ARMOR",
-        "SIEGECRAFT",
-        "SIEGEOPERATE",
-        "BOWYER",
-        "PIKE",
-        "WHIP",
-        "BOW",
-        "BLOWGUN",
-        "THROW",
-        "MECHANICS",
-        "MAGIC_NATURE",
-        "SNEAK",
-        "DESIGNBUILDING",
-        "DRESS_WOUNDS",
-        "DIAGNOSE",
-        "SURGERY",
-        "SET_BONE",
-        "SUTURE",
-        "CRUTCH_WALK",
-        "WOOD_BURNING",
-        "LYE_MAKING",
-        "SOAP_MAKING",
-        "POTASH_MAKING",
-        "DYER",
-        "OPERATE_PUMP",
-        "SWIMMING",
-        "PERSUASION",
-        "NEGOTIATION",
-        "JUDGING_INTENT",
-        "APPRAISAL",
-        "ORGANIZATION",
-        "RECORD_KEEPING",
-        "LYING",
-        "INTIMIDATION",
-        "CONVERSATION",
-        "COMEDY",
-        "FLATTERY",
-        "CONSOLE",
-        "PACIFY",
-        "TRACKING",
-        "KNOWLEDGE_ACQUISITION",
-        "CONCENTRATION",
-        "DISCIPLINE",
-        "SITUATIONAL_AWARENESS",
-        "WRITING",
-        "PROSE",
-        "POETRY",
-        "READING",
-        "SPEAKING",
-        "COORDINATION",
-        "BALANCE",
-        "LEADERSHIP",
-        "TEACHING",
-        "MELEE_COMBAT",
-        "RANGED_COMBAT",
-        "WRESTLING",
-        "BITE",
-        "GRASP_STRIKE",
-        "STANCE_STRIKE",
-        "DODGING",
-        "MISC_WEAPON",
-        "KNAPPING",
-        "MILITARY_TACTICS",
-        "SHEARING",
-        "SPINNING",
-        "POTTERY",
-        "GLAZING",
-        "PRESSING",
-        "BEEKEEPING",
-        "WAX_WORKING",
-        "CLIMBING",
-        "GELD",
-        "DANCE",
-        "MAKE_MUSIC",
-        "SING",
-        "PLAY_KEYBOARD_INSTRUMENT",
-        "PLAY_STRINGED_INSTRUMENT",
-        "PLAY_WIND_INSTRUMENT",
-        "PLAY_PERCUSSION_INSTRUMENT",
-        "CRITICAL_THINKING1",
-        "LOGIC",
-        "MATHEMATICS",
-        "ASTRONOMY",
-        "CHEMISTRY",
-        "GEOGRAPHY",
-        "OPTICS_ENGINEER",
-        "FLUID_ENGINEER",
-        "PAPERMAKING",
-        "BOOKBINDING1",
-        "INTRIGUE",
-        "RIDING"
-    }
-
-    return lookupTable[self.id]
-end
-
 function Skill:toString()
     return string.format(
         "name: %30s, id: %4d, rating: %4d, experience: %d",
-        self:getName(),
+        self.name,
         self.id,
         self.rating,
         self.experience
     )
 end
 
+function skill_id_to_name(target_id)
+    for id, name in ipairs(df.job_skill) do
+        if id == target_id then
+            return name
+        end
+    end
+    return "UNKNOWN"
+end
+
 -- Unit parsing
-unit_export_data = {name = "default", profession = -1, profession2 = -1, skills = {}, attributes = {}}
+unit_export_data = {
+    name = "default",
+    profession = -1,
+    profession2 = -1,
+    skills = {},
+    body_attributes = {},
+    mental_attributes = {}
+}
 
 function get_unit_attributes(target)
     if target == nil then
@@ -215,12 +95,12 @@ function get_unit_attributes(target)
 
     for attribute_name, attribute in pairs(unit.body.physical_attrs) do
         attr_data = Attribute:new(attribute_name, attribute.value, attribute.max_value)
-        table.insert(unit_export_data.attributes, attr_data)
+        table.insert(unit_export_data.body_attributes, attr_data)
     end
 
     for attribute_name, attribute in pairs(unit.status.current_soul.mental_attrs) do
         attr_data = Attribute:new(attribute_name, attribute.value, attribute.max_value)
-        table.insert(unit_export_data.attributes, attr_data)
+        table.insert(unit_export_data.mental_attributes, attr_data)
     end
 end
 
@@ -259,8 +139,12 @@ function data_preview(export_data)
     print("profession: " .. export_data.profession)
     print("profession2: " .. export_data.profession2)
 
-    print("\n--------------\nATTRIBUTES\n--------------")
-    for i, attribute in ipairs(export_data.attributes) do
+    print("\n--------------\nBODY ATTRIBUTES\n--------------")
+    for i, attribute in ipairs(export_data.body_attributes) do
+        print(attribute:toString())
+    end
+    print("\n--------------\nMENTAL ATTRIBUTES\n--------------")
+    for i, attribute in ipairs(export_data.mental_attributes) do
         print(attribute:toString())
     end
 
@@ -305,59 +189,16 @@ function get_world_date_str()
     return date_str
 end
 
-function export_to_xml(export_data)
+function export_to_json(export_data)
     local folder_name = "exported_adventurers"
     local file_name =
         export_data.name ..
-        "-" .. df.global.world.cur_savegame.save_dir .. "-" .. get_world_date_str() .. "-adventurer.xml"
+        "-" .. df.global.world.cur_savegame.save_dir .. "-" .. get_world_date_str() .. "-adventurer.json"
     local full_file_path = folder_name .. "/" .. file_name
-
-    if not create_folder(folder_name) then
-        qerror("The foldername " .. folder_name .. " could not be created")
-    end
-
-    if not move_to_folder(folder_name) then
-        qerror("Could not move into folder: " .. folder_name)
-    end
-
-    local file = io.open(file_name, "w")
-    move_back_to_main_folder()
-    if not file then
-        qerror("could not open file: " .. full_file_path)
-    end
+    create_folder(folder_name)
 
     print(string.format("\nWriting to %s ...", full_file_path))
-    file:write('<?xml version="1.0" encoding=\'UTF-8\'?>\n')
-    file:write("<adventurer>\n")
-
-    file:write("\t<metadata>\n")
-    file:write("\t\t<name>\n" .. export_data.name .. "\t\t</name>\n")
-    file:write("\t\t<profession>\n" .. export_data.profession .. "\t\t</profession>\n")
-    file:write("\t\t<profession2>\n" .. export_data.profession2 .. "\t\t</profession2>\n")
-    file:write("\t</metadata>\n")
-
-    file:write("\t<attributes>\n")
-    for i, attribute in ipairs(export_data.attributes) do
-        file:write("\t\t<attribute>\n")
-        file:write("\t\t\t<name>\n" .. attribute.name .. "\t\t\t</name>\n")
-        file:write("\t\t\t<value>\n" .. attribute.value .. "\t\t\t</value>\n")
-        file:write("\t\t\t<max_value>\n" .. attribute.max_value .. "\t\t\t</max_value>\n")
-        file:write("\t\t</attribute>\n")
-    end
-    file:write("\t</attributes>\n")
-
-    file:write("\t<skills>\n")
-    for i, skill in ipairs(export_data.skills) do
-        file:write("\t\t<skill>\n")
-        file:write("\t\t\t<id>" .. skill.id .. "\t\t\t</id>")
-        file:write("\t\t\t<rating>" .. skill.rating .. "\t\t\t</rating>")
-        file:write("\t\t\t<experience>" .. skill.experience .. "\t\t\t</experience>")
-        file:write("\t\t</skill>\n")
-    end
-    file:write("\t</skills>\n")
-
-    file:write("</adventurer>\n")
-    file:close()
+    json.encode_file(export_data, full_file_path)
     print("Done!")
 end
 
@@ -367,7 +208,7 @@ function export_adv()
     get_unit_skills(target)
     get_unit_metadata(target)
     data_preview(unit_export_data)
-    export_to_xml(unit_export_data)
+    export_to_json(unit_export_data)
 end
 
 export_adv()
