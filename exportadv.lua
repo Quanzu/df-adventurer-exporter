@@ -45,15 +45,6 @@ unit_export_data = {
     attributes = {}
 }
 
-function skill_id_to_name(target_id)
-    for id, name in ipairs(df.job_skill) do
-        if id == target_id then
-            return name
-        end
-    end
-    return "UNKNOWN"
-end
-
 function get_unit_attributes(unit)
     for attribute_name, attribute in pairs(unit.body.physical_attrs) do
         unit_export_data.attributes[attribute_name] = {
@@ -70,9 +61,19 @@ function get_unit_attributes(unit)
     end
 end
 
+function skill_id_to_name(target_id)
+    for id, name in ipairs(df.job_skill) do
+        if id == target_id then
+            return name
+        end
+    end
+    return "UNKNOWN"
+end
+
 function get_unit_skills(unit)
     for index, skill in ipairs(unit.status.current_soul.skills) do
         unit_export_data.skills[tostring(skill.id)] = {
+            name = skill_id_to_name(skill.id),
             rating = skill.rating,
             experience = skill.experience
         }
@@ -139,9 +140,8 @@ function data_preview(export_data)
     for id, skill in pairs(export_data.skills) do
         print(
             string.format(
-                "name: %30s, id: %4d, rating: %4d, experience: %d",
-                skill_id_to_name(tonumber(id)),
-                id,
+                "name: %30s, rating: %4d, experience: %d",
+                skill.name,
                 skill.rating,
                 skill.experience
             )
