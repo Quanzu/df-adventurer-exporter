@@ -127,7 +127,7 @@ function set_skill_data(unit, skills)
         print(
             string.format(
                 "Setting %s to rating %d and experience %d.",
-                skill_id_to_name(skill_id),
+                skill.name,
                 skill.rating,
                 skill.experience
             )
