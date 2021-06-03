@@ -1,5 +1,5 @@
 -- Export adventurer data into an JSON file for use in importadv script.
--- Script version: v0.2.0
+-- Script version: v0.2.1
 -- For DF v0.47.05
 --[====[
 exportadv
@@ -17,48 +17,33 @@ Usage::
 
 local json = require "json"
 
--- Attribute Class
-local Attribute = {}
-Attribute.__index = Attribute
-
-function Attribute:new(name, value, max_value)
-    this = {
-        name = name or "default",
-        value = value or 0,
-        max_value = max_value or 0
-    }
-    setmetatable(this, Attribute)
-    return this
-end
-
-function Attribute:toString()
-    return string.format("name: %30s, value: %5d, max_value: %5d", self.name, self.value, self.max_value)
-end
-
--- Skill Class
-local Skill = {}
-Skill.__index = Skill
-
-function Skill:new(id, rating, experience)
-    this = {
-        id = id or 0,
-        rating = rating or 0,
-        experience = experience or 0,
-        name = skill_id_to_name(id or 0)
-    }
-    setmetatable(this, Skill)
-    return this
-end
-
-function Skill:toString()
-    return string.format(
-        "name: %30s, id: %4d, rating: %4d, experience: %d",
-        self.name,
-        self.id,
-        self.rating,
-        self.experience
-    )
-end
+-- Unit parsing
+unit_export_data = {
+    name = "default",
+    race = -1,
+    sex = -1,
+    profession = -1,
+    profession2 = -1,
+    appearance = {
+        size_modifier = -1,
+        body_modifiers = {},
+        bp_modifiers = {},
+        tissue_style = {},
+        tissue_style_civ_id = {},
+        tissue_style_id = {},
+        tissue_style_type = {},
+        tissue_length = {},
+        colors = {},
+        genes = {
+            appearance = {},
+            colors = {}
+        }
+    },
+    body_metadata = {},
+    personality = {},
+    skills = {},
+    attributes = {}
+}
 
 function skill_id_to_name(target_id)
     for id, name in ipairs(df.job_skill) do
@@ -69,37 +54,28 @@ function skill_id_to_name(target_id)
     return "UNKNOWN"
 end
 
--- Unit parsing
-unit_export_data = {
-    name = "default",
-    race = -1,
-    sex = -1,
-    profession = -1,
-    profession2 = -1,
-    appearance = {},
-    body_metadata = {},
-    personality = {},
-    skills = {},
-    body_attributes = {},
-    mental_attributes = {}
-}
-
 function get_unit_attributes(unit)
     for attribute_name, attribute in pairs(unit.body.physical_attrs) do
-        attr_data = Attribute:new(attribute_name, attribute.value, attribute.max_value)
-        table.insert(unit_export_data.body_attributes, attr_data)
+        unit_export_data.attributes[attribute_name] = {
+            value = attribute.value,
+            max_value = attribute.max_value
+        }
     end
 
     for attribute_name, attribute in pairs(unit.status.current_soul.mental_attrs) do
-        attr_data = Attribute:new(attribute_name, attribute.value, attribute.max_value)
-        table.insert(unit_export_data.mental_attributes, attr_data)
+        unit_export_data.attributes[attribute_name] = {
+            value = attribute.value,
+            max_value = attribute.max_value
+        }
     end
 end
 
 function get_unit_skills(unit)
     for index, skill in ipairs(unit.status.current_soul.skills) do
-        local skill_data = Skill:new(skill.id, skill.rating, skill.experience)
-        table.insert(unit_export_data.skills, skill_data)
+        unit_export_data.skills[tostring(skill.id)] = {
+            rating = skill.rating,
+            experience = skill.experience
+        }
     end
 end
 
@@ -116,66 +92,24 @@ function get_unit_body_metadata(unit)
     }
 end
 
+function add_vector_to_table(vector, target_table)
+    for index, value in ipairs(vector) do
+        target_table[index] = value
+    end
+end
+
 function get_unit_appearance(unit)
-    unit_export_data.appearance.body_modifiers = {}
-    for id, value in pairs(unit.appearance.body_modifiers) do
-        modifier = {id = id, value = value}
-        table.insert(unit_export_data.appearance.body_modifiers, modifier)
-    end
-
-    unit_export_data.appearance.bp_modifiers = {}
-    for id, value in pairs(unit.appearance.bp_modifiers) do
-        modifier = {id = id, value = value}
-        table.insert(unit_export_data.appearance.bp_modifiers, modifier)
-    end
-
     unit_export_data.appearance.size_modifier = unit.appearance.size_modifier
-
-    unit_export_data.appearance.tissue_style = {}
-    for id, value in pairs(unit.appearance.tissue_style) do
-        ts = {id = id, value = value}
-        table.insert(unit_export_data.appearance.tissue_style, ts)
-    end
-
-    unit_export_data.appearance.tissue_style_civ_id = {}
-    for id, value in pairs(unit.appearance.tissue_style_civ_id) do
-        ts = {id = id, value = value}
-        table.insert(unit_export_data.appearance.tissue_style_civ_id, ts)
-    end
-
-    unit_export_data.appearance.tissue_style_id = {}
-    for id, value in pairs(unit.appearance.tissue_style_id) do
-        ts = {id = id, value = value}
-        table.insert(unit_export_data.appearance.tissue_style_id, ts)
-    end
-
-    unit_export_data.appearance.tissue_style_type = {}
-    for id, value in pairs(unit.appearance.tissue_style_type) do
-        ts = {id = id, value = value}
-        table.insert(unit_export_data.appearance.tissue_style_type, ts)
-    end
-
-    unit_export_data.appearance.tissue_length = {}
-    for id, value in pairs(unit.appearance.tissue_length) do
-        ts = {id = id, value = value}
-        table.insert(unit_export_data.appearance.tissue_length, ts)
-    end
-
-    unit_export_data.appearance.colors = {}
-    for id, value in pairs(unit.appearance.colors) do
-        color = {id = id, value = value}
-        table.insert(unit_export_data.appearance.colors, color)
-    end
-
-    unit_export_data.appearance.genes = {appearance = {}, colors = {}}
-    for id, value in pairs(unit.appearance.genes.appearance) do
-        gene = {id = id, value = value}
-        table.insert(unit_export_data.appearance.genes.appearance, gene)
-    end
-    for id, value in pairs(unit.appearance.genes.colors) do
-        gene = {id = id, value = value}
-        table.insert(unit_export_data.appearance.genes.colors, gene)
-    end
+    add_vector_to_table(unit.appearance.body_modifiers, unit_export_data.appearance.body_modifiers)
+    add_vector_to_table(unit.appearance.bp_modifiers, unit_export_data.appearance.bp_modifiers)
+    add_vector_to_table(unit.appearance.tissue_style, unit_export_data.appearance.tissue_style)
+    add_vector_to_table(unit.appearance.tissue_style_civ_id, unit_export_data.appearance.tissue_style_civ_id)
+    add_vector_to_table(unit.appearance.tissue_style_id, unit_export_data.appearance.tissue_style_id)
+    add_vector_to_table(unit.appearance.tissue_style_type, unit_export_data.appearance.tissue_style_type)
+    add_vector_to_table(unit.appearance.tissue_length, unit_export_data.appearance.tissue_length)
+    add_vector_to_table(unit.appearance.colors, unit_export_data.appearance.colors)
+    add_vector_to_table(unit.appearance.genes.appearance, unit_export_data.appearance.genes.appearance)
+    add_vector_to_table(unit.appearance.genes.colors, unit_export_data.appearance.genes.colors)
 end
 
 function get_unit_metadata(unit)
@@ -197,18 +131,21 @@ function data_preview(export_data)
     print("profession: " .. export_data.profession)
     print("profession2: " .. export_data.profession2)
 
-    print("\n--------------\nBODY ATTRIBUTES\n--------------")
-    for i, attribute in ipairs(export_data.body_attributes) do
-        print(attribute:toString())
+    print("\n--------------\nATTRIBUTES\n--------------")
+    for name, attribute in pairs(export_data.attributes) do
+        print(string.format("name: %30s, value: %5d, max_value: %5d", name, attribute.value, attribute.max_value))
     end
-    print("\n--------------\nMENTAL ATTRIBUTES\n--------------")
-    for i, attribute in ipairs(export_data.mental_attributes) do
-        print(attribute:toString())
-    end
-
     print("--------------\nSKILLS\n--------------")
-    for i, skill in ipairs(export_data.skills) do
-        print(skill:toString())
+    for id, skill in pairs(export_data.skills) do
+        print(
+            string.format(
+                "name: %30s, id: %4d, rating: %4d, experience: %d",
+                skill_id_to_name(tonumber(id)),
+                id,
+                skill.rating,
+                skill.experience
+            )
+        )
     end
 end
 
