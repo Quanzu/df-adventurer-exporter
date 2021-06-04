@@ -1,15 +1,15 @@
 -- Export adventurer data into an JSON file for use in importadv script.
--- Script version: v0.2.1
+-- Script version: v0.3.0
 -- For DF v0.47.05
 --[====[
 exportadv
 =============
 Export adventurer data into an JSON file for use in importadv script.
-Currently, this script only exports adventurer skills, attributes, and professions.
-Future iterations will hopefully be able to export more data to more accurately
-reconstruct an adventurer.
+Currently, this script exports adventurer skills, attributes, appearance, and personality.
+
 This script will create a file in the format:
     exported_adventurers/{first_name}-{save_folder}-YYYYY-MM-DD-adventurer.json
+
 Simply enter adventure mode with your character and run this script!
 Usage::
     exportadv
@@ -17,7 +17,9 @@ Usage::
 
 local json = require "json"
 
--- Unit parsing
+------------------
+-- Unit parsing --
+------------------
 unit_export_data = {
     name = "default",
     race = -1,
@@ -34,13 +36,10 @@ unit_export_data = {
         tissue_style_type = {},
         tissue_length = {},
         colors = {},
-        genes = {
-            appearance = {},
-            colors = {}
-        }
+        genes = { appearance = {}, colors = {} }
     },
     body_metadata = {},
-    personality = {},
+    personality = { values = {}, traits = {}, dreams = {} },
     skills = {},
     attributes = {}
 }
@@ -113,6 +112,55 @@ function get_unit_appearance(unit)
     add_vector_to_table(unit.appearance.genes.colors, unit_export_data.appearance.genes.colors)
 end
 
+function get_field_names(t)
+    local names = {}
+    local i,v=next(t,nil)
+    while i do
+        tinsert(names,i)
+        i,v=next(t,i)
+    end
+    return names
+end
+
+function extract_unseen_beliefs(unit, beliefs)
+    local personality = unit.status.current_soul.personality
+    for id, value_name in ipairs(df.value_type) do
+        if id == df.value_type.NONE then
+            goto continue
+        end
+        if not unit_export_data.personality.values[id] then
+            unit_export_data.personality.values[id] = { name = value_name, strength = beliefs[id] }
+        end
+        ::continue::
+    end
+end
+
+function get_unit_personality(unit)
+    local personality = unit.status.current_soul.personality
+
+    -- Personal beliefs
+    for i, value in ipairs(personality.values) do
+        unit_export_data.personality.values[value.type] = { name = df.value_type[value.type], strength = value.strength }
+    end
+
+    -- Cultural beliefs
+    if personality.cultural_identity ~= -1 then
+        extract_unseen_beliefs(unit, df.cultural_identity.find(personality.cultural_identity).values)
+    elseif personality.civ_id ~= -1 then
+        extract_unseen_beliefs(unit, df.historical_entity.find(personality.civ_id).resources.values)
+    end
+
+    -- Traits
+    for name, strength in pairs(personality.traits) do
+        unit_export_data.personality.traits[name] = strength
+    end
+
+    -- Dreams
+    for i, dream in ipairs(personality.dreams) do
+        unit_export_data.personality.dreams[tostring(dream.type)] = { accomplished = dream.flags.accomplished }
+    end
+end
+
 function get_unit_metadata(unit)
     unit_export_data.name = unit.name.first_name
     unit_export_data.race = unit.race
@@ -121,37 +169,10 @@ function get_unit_metadata(unit)
     unit_export_data.profession2 = unit.profession2
 end
 
--- Export process
-
-function data_preview(export_data)
-    print("\nExporting adventurer with the following data...\n")
-
-    print("name: " .. export_data.name)
-    print("race: " .. export_data.race)
-    print("sex: " .. export_data.sex)
-    print("profession: " .. export_data.profession)
-    print("profession2: " .. export_data.profession2)
-
-    print("\n--------------\nATTRIBUTES\n--------------")
-    for name, attribute in pairs(export_data.attributes) do
-        print(string.format("name: %30s, value: %5d, max_value: %5d", name, attribute.value, attribute.max_value))
-    end
-    print("--------------\nSKILLS\n--------------")
-    for id, skill in pairs(export_data.skills) do
-        print(
-            string.format(
-                "name: %30s, rating: %4d, experience: %d",
-                skill.name,
-                skill.rating,
-                skill.experience
-            )
-        )
-    end
-end
-
--- Check if a folder with this name could be created or already exists
+--------------------
+-- Export process --
+--------------------
 function create_folder(folder_name)
-    -- check if it is a file, not a folder
     if dfhack.filesystem.isfile(folder_name) then
         qerror(folder_name .. " is a file, not a folder")
     end
@@ -162,8 +183,6 @@ function create_folder(folder_name)
     end
 end
 
--- Get the date of the world as a string
--- Format: "YYYYY-MM-DD"
 function get_world_date_str()
     local month = dfhack.world.ReadCurrentMonth() + 1 --days and months are 1-indexed
     local day = dfhack.world.ReadCurrentDay()
@@ -189,13 +208,12 @@ function export_adv()
     if not target then
         qerror("No valid unit selected!")
     end
-
     get_unit_attributes(target)
     get_unit_skills(target)
     get_unit_appearance(target)
     get_unit_body_metadata(target)
+    get_unit_personality(target)
     get_unit_metadata(target)
-    data_preview(unit_export_data)
     export_to_json(unit_export_data)
 end
 
